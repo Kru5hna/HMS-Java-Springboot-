@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Patients from './components/Patients';
@@ -6,25 +6,23 @@ import PatientDrawer from './components/PatientDrawer';
 import Doctors from './components/Doctors';
 import Appointments from './components/Appointments';
 import Wards from './components/Wards';
-import { 
-  initialPatients, 
-  initialDoctors, 
-  initialBeds, 
-  initialAppointments, 
-  initialActivities 
-} from './data/mockData';
+import { patientsApi, doctorsApi, appointmentsApi, bedsApi, activitiesApi } from './utils/api';
 import './App.css';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 
-  // Core Entity States
-  const [patients, setPatients] = useState(initialPatients);
-  const [doctors, setDoctors] = useState(initialDoctors);
-  const [beds, setBeds] = useState(initialBeds);
-  const [appointments, setAppointments] = useState(initialAppointments);
-  const [activities, setActivities] = useState(initialActivities);
+  // Core Entity States (loaded from backend)
+  const [patients, setPatients] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [beds, setBeds] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [activities, setActivities] = useState([]);
+
+  // Loading & error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Modal & Drawer Selection States
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -43,6 +41,35 @@ function App() {
 
   const [newPrescriptionText, setNewPrescriptionText] = useState('');
 
+  // ── Fetch all data from backend on mount ────────────────
+  const fetchAllData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [patientsData, doctorsData, bedsData, appointmentsData, activitiesData] = await Promise.all([
+        patientsApi.getAll(),
+        doctorsApi.getAll(),
+        bedsApi.getAll(),
+        appointmentsApi.getAll(),
+        activitiesApi.getAll(),
+      ]);
+      setPatients(patientsData);
+      setDoctors(doctorsData);
+      setBeds(bedsData);
+      setAppointments(appointmentsData);
+      setActivities(activitiesData);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
+
   // Sync theme
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -53,145 +80,182 @@ function App() {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  const logActivity = (text, type = 'general') => {
-    setActivities(prev => [
-      { id: Date.now(), text, time: "Just now", type },
-      ...prev
-    ]);
-  };
-
-  // Process Patient Intake
-  const handleRegisterPatient = (e) => {
+  // ── Process Patient Intake ──────────────────────────────
+  const handleRegisterPatient = async (e) => {
     e.preventDefault();
     if (!newPatient.name || !newPatient.age || !newPatient.contact) return;
 
-    const assignedId = Date.now();
-    const mockVitals = {
-      bp: "120/80",
-      pulse: 75 + Math.floor(Math.random() * 10),
-      temp: "98.6°F",
-      spo2: 98
-    };
+    try {
+      const requestBody = {
+        name: newPatient.name,
+        age: parseInt(newPatient.age),
+        gender: newPatient.gender,
+        bloodGroup: newPatient.bloodGroup,
+        contact: newPatient.contact,
+        status: newPatient.status,
+        department: newPatient.department,
+        bedId: newPatient.status === 'Admitted' && newPatient.bedId !== 'None' ? newPatient.bedId : null,
+        doctorName: newPatient.doctorName,
+        diagnosis: newPatient.diagnosis || null,
+      };
 
-    const patientToAdd = {
-      ...newPatient,
-      id: assignedId,
-      age: parseInt(newPatient.age),
-      checkInDate: new Date().toISOString().split('T')[0],
-      vitals: mockVitals,
-      prescriptions: newPatient.diagnosis ? ["Initial Diagnostic Recommendations"] : []
-    };
+      await patientsApi.create(requestBody);
 
-    if (patientToAdd.status === 'Admitted' && patientToAdd.bedId !== 'None') {
-      setBeds(prev => prev.map(b => 
-        b.id === patientToAdd.bedId ? { ...b, status: 'Occupied', occupiedById: assignedId } : b
-      ));
-      logActivity(`Admitted ${patientToAdd.name} to Bed ${patientToAdd.bedId} (${patientToAdd.department}).`, 'checkin');
-    } else {
-      patientToAdd.bedId = 'None';
-      logActivity(`Registered outpatient ${patientToAdd.name} in General Clinic.`, 'checkin');
+      // If admitted with a bed, update bed status
+      if (requestBody.status === 'Admitted' && requestBody.bedId) {
+        // The backend may handle bed status update; we just refresh
+      }
+
+      // Refresh all data from backend to get the full picture
+      await fetchAllData();
+
+      setShowPatientModal(false);
+      setNewPatient({
+        name: '', age: '', gender: 'Male', bloodGroup: 'O+', contact: '',
+        department: 'General Medicine', status: 'Outpatient', bedId: 'None',
+        doctorName: 'Dr. Maria Santos', diagnosis: ''
+      });
+    } catch (err) {
+      console.error('Failed to register patient:', err);
+      alert('Failed to register patient: ' + err.message);
     }
-
-    setPatients(prev => [patientToAdd, ...prev]);
-    setShowPatientModal(false);
-    setNewPatient({
-      name: '', age: '', gender: 'Male', bloodGroup: 'O+', contact: '',
-      department: 'General Medicine', status: 'Outpatient', bedId: 'None',
-      doctorName: 'Dr. Maria Santos', diagnosis: ''
-    });
   };
 
-  // Book Appointment
-  const handleBookAppointment = (e) => {
+  // ── Book Appointment ────────────────────────────────────
+  const handleBookAppointment = async (e) => {
     e.preventDefault();
     if (!newAppointment.patientName || !newAppointment.date || !newAppointment.time) return;
 
-    const appToAdd = {
-      id: Date.now(),
-      ...newAppointment,
-      status: 'Pending'
-    };
+    try {
+      await appointmentsApi.create({
+        patientName: newAppointment.patientName,
+        doctorName: newAppointment.doctorName,
+        date: newAppointment.date,
+        time: newAppointment.time,
+        reason: newAppointment.reason,
+      });
 
-    setAppointments(prev => [appToAdd, ...prev]);
-    logActivity(`Appointment booked for ${appToAdd.patientName} with ${appToAdd.doctorName}.`, 'appointment');
-    setShowAppointmentModal(false);
-    setNewAppointment({
-      patientName: '', doctorName: 'Dr. Sarah Jenkins', date: '', time: '', reason: ''
-    });
-  };
+      await fetchAllData();
 
-  // Discharge Patient
-  const handleDischargePatient = (patientId) => {
-    const patient = patients.find(p => p.id === patientId);
-    if (!patient) return;
-
-    setPatients(prev => prev.map(p => 
-      p.id === patientId ? { ...p, status: 'Discharged', bedId: 'None' } : p
-    ));
-
-    if (patient.bedId !== 'None') {
-      setBeds(prev => prev.map(b => 
-        b.id === patient.bedId ? { ...b, status: 'Cleaning', occupiedById: null } : b
-      ));
-      logActivity(`Discharged patient ${patient.name}. Bed ${patient.bedId} set to cleaning.`, 'bed');
-    } else {
-      logActivity(`Discharged outpatient ${patient.name}.`, 'checkin');
+      setShowAppointmentModal(false);
+      setNewAppointment({
+        patientName: '', doctorName: 'Dr. Sarah Jenkins', date: '', time: '', reason: ''
+      });
+    } catch (err) {
+      console.error('Failed to book appointment:', err);
+      alert('Failed to book appointment: ' + err.message);
     }
-
-    setSelectedPatient(prev => prev && prev.id === patientId ? { ...prev, status: 'Discharged', bedId: 'None' } : prev);
   };
 
-  // Add Prescription
-  const handleAddPrescription = () => {
-    if (!newPrescriptionText.trim()) return;
+  // ── Discharge Patient ───────────────────────────────────
+  const handleDischargePatient = async (patientId) => {
+    try {
+      await patientsApi.discharge(patientId);
+      await fetchAllData();
 
-    setPatients(prev => prev.map(p => {
-      if (p.id === selectedPatient.id) {
-        const updated = [...(p.prescriptions || []), newPrescriptionText];
-        setSelectedPatient(current => ({ ...current, prescriptions: updated }));
-        return { ...p, prescriptions: updated };
-      }
-      return p;
-    }));
-
-    logActivity(`Added prescription to ${selectedPatient.name}: "${newPrescriptionText}"`, 'general');
-    setNewPrescriptionText('');
+      // Update selected patient if it's the one being discharged
+      setSelectedPatient(prev => {
+        if (prev && prev.id === patientId) {
+          return { ...prev, status: 'Discharged', bedId: 'None' };
+        }
+        return prev;
+      });
+    } catch (err) {
+      console.error('Failed to discharge patient:', err);
+      alert('Failed to discharge patient: ' + err.message);
+    }
   };
 
-  // Doctors availability
-  const toggleDoctorStatus = (docId) => {
+  // ── Add Prescription ────────────────────────────────────
+  const handleAddPrescription = async () => {
+    if (!newPrescriptionText.trim() || !selectedPatient) return;
+
+    try {
+      const updatedPatient = await patientsApi.addPrescription(selectedPatient.id, newPrescriptionText);
+      
+      // Update the selected patient with the new data from backend
+      setSelectedPatient(updatedPatient);
+      
+      // Refresh all data
+      await fetchAllData();
+
+      setNewPrescriptionText('');
+    } catch (err) {
+      console.error('Failed to add prescription:', err);
+      alert('Failed to add prescription: ' + err.message);
+    }
+  };
+
+  // ── Toggle Doctor Status ────────────────────────────────
+  const toggleDoctorStatus = async (docId) => {
+    const doctor = doctors.find(d => d.id === docId);
+    if (!doctor) return;
+
     const statuses = ['Available', 'In Surgery', 'Off-Duty'];
-    setDoctors(prev => prev.map(d => {
-      if (d.id === docId) {
-        const nextStatus = statuses[(statuses.indexOf(d.status) + 1) % statuses.length];
-        logActivity(`Dr. ${d.name.split(' ')[1]} is now ${nextStatus}.`, 'doctor');
-        return { ...d, status: nextStatus };
-      }
-      return d;
-    }));
+    const nextStatus = statuses[(statuses.indexOf(doctor.status) + 1) % statuses.length];
+
+    try {
+      await doctorsApi.updateStatus(docId, nextStatus);
+      await fetchAllData();
+    } catch (err) {
+      console.error('Failed to update doctor status:', err);
+      alert('Failed to update doctor status: ' + err.message);
+    }
   };
 
-  // Appointments actions
-  const handleUpdateAppointmentStatus = (id, nextStatus) => {
-    setAppointments(prev => prev.map(app => {
-      if (app.id === id) {
-        logActivity(`Appointment for ${app.patientName} was ${nextStatus.toLowerCase()}.`, 'appointment');
-        return { ...app, status: nextStatus };
-      }
-      return app;
-    }));
+  // ── Update Appointment Status ───────────────────────────
+  const handleUpdateAppointmentStatus = async (id, nextStatus) => {
+    try {
+      await appointmentsApi.updateStatus(id, nextStatus);
+      await fetchAllData();
+    } catch (err) {
+      console.error('Failed to update appointment status:', err);
+      alert('Failed to update appointment status: ' + err.message);
+    }
   };
 
-  // Sanitizing bed completion
-  const handleBedCleaningComplete = (bedId) => {
-    setBeds(prev => prev.map(b => {
-      if (b.id === bedId) {
-        logActivity(`Bed ${b.number} is sanitized and available.`, 'bed');
-        return { ...b, status: 'Available' };
-      }
-      return b;
-    }));
+  // ── Bed Cleaning Complete ───────────────────────────────
+  const handleBedCleaningComplete = async (bedId) => {
+    try {
+      await bedsApi.cleaningComplete(bedId);
+      await fetchAllData();
+    } catch (err) {
+      console.error('Failed to update bed status:', err);
+      alert('Failed to update bed status: ' + err.message);
+    }
   };
+
+  // ── Loading & Error States ──────────────────────────────
+  if (loading) {
+    return (
+      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="loading-spinner" style={{
+            width: '48px', height: '48px', border: '4px solid var(--border)',
+            borderTop: '4px solid var(--primary)', borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite', margin: '0 auto 16px'
+          }} />
+          <h2 style={{ color: 'var(--text-primary)', marginBottom: '8px' }}>Loading CareSync...</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Connecting to hospital database</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div style={{ textAlign: 'center', maxWidth: '480px', padding: '32px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+          <h2 style={{ color: 'var(--danger)', marginBottom: '12px' }}>Connection Error</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '14px' }}>{error}</p>
+          <button className="btn btn-primary" onClick={fetchAllData}>
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
