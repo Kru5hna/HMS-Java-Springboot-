@@ -6,9 +6,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // Proxy /api requests to the Spring Boot backend during local development
+      // Proxy /api and /auth requests to the Spring Cloud API Gateway during local development
       '/api': {
-        target: 'http://localhost:8081',
+        target: 'http://localhost:8090',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/auth': {
+        target: 'http://localhost:8090',
         changeOrigin: true,
         secure: false,
       },

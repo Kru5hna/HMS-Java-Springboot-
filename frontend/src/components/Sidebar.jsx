@@ -46,10 +46,10 @@ function Sidebar({ activeTab, setActiveTab, theme, toggleTheme }) {
 
       <div className="sidebar-footer">
         <div className="user-profile">
-          <div className="user-avatar">JD</div>
+          <div className="user-avatar">AU</div>
           <div className="user-info">
-            <span className="user-name">Jane Doe</span>
-            <span className="user-role">Administrator</span>
+            <span className="user-name">Admin User</span>
+            <span className="user-role">System Admin</span>
           </div>
         </div>
         

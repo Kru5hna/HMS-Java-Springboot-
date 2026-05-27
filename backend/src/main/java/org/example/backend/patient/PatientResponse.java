@@ -32,7 +32,8 @@ public record PatientResponse(
                 patient.getBedId() == null ? "None" : patient.getBedId(),
                 patient.getDoctorName(),
                 patient.getCheckInDate(),
-                VitalsResponse.from(patient.getVitals()),
+                // FIX B-05: Guard against null vitals to prevent NullPointerException during response mapping.
+                patient.getVitals() == null ? null : VitalsResponse.from(patient.getVitals()),
                 patient.getDiagnosis(),
                 List.copyOf(patient.getPrescriptions())
         );

@@ -132,7 +132,8 @@ function Dashboard({ patients, doctors, beds, appointments, activities, setActiv
             </p>
 
             <div className="flex-column gap-md" style={{ display: 'flex' }}>
-              {['Cardiology', 'Pediatrics', 'Neurology', 'Orthopedics', 'General Medicine'].map(dept => {
+            {/* Derive departments dynamically from patients — new depts appear automatically. */}
+              {[...new Set(patients.map(p => p.department))].sort().map(dept => {
                 const count = deptSummary[dept] || 0;
                 const percentage = totalAdmitted > 0 ? (count / totalAdmitted) * 100 : 0;
                 let color = 'var(--primary)';

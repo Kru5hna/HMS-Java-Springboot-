@@ -5,8 +5,8 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.6</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <version>3.3.5</version>
+        <relativePath/> 
     </parent>
     <groupId>org.example</groupId>
     <artifactId>backend</artifactId>
@@ -30,20 +30,10 @@
         <java.version>17</java.version>
     </properties>
     <dependencies>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-controls</artifactId>
-            <version>21</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-fxml</artifactId>
-            <version>21</version>
-        </dependency>
+        <!-- FIX B-02: Renamed from incorrect 'spring-boot-starter-webmvc' to correct 'spring-boot-starter-web' -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
         <dependency>
@@ -78,11 +68,9 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-h2console</artifactId>
-            <scope>runtime</scope>
-        </dependency>
+        <!-- FIX B-02: Removed the non-existent 'spring-boot-h2console' dependency.
+             H2 Console is enabled via spring.h2.console.enabled=true in application properties,
+             supported by the h2 runtime dependency already included above. -->
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -100,9 +88,10 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- FIX B-02: Renamed from incorrect 'spring-boot-starter-webmvc-test' to correct 'spring-boot-starter-test' -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -159,17 +148,8 @@
                 </executions>
             </plugin>
 
-            <plugin>
-                <groupId>org.openjfx</groupId>
-                <artifactId>javafx-maven-plugin</artifactId>
-                <version>0.0.8</version>
-
-                <configuration>
-                    <mainClass>
-                        org.example.backend.JavaFxApplication
-                    </mainClass>
-                </configuration>
-            </plugin>
+            <!-- FIX B-03: Removed dead JavaFX plugin block entirely (referenced a non-existent
+                 JavaFxApplication class; the project is a pure REST API with no JavaFX dependency). -->
 
         </plugins>
     </build>

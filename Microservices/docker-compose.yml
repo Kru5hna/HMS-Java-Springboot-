@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # ────────────────────────────────────────────────────────────────────────
+  # DATABASE SERVER
+  # ────────────────────────────────────────────────────────────────────────
+  mysql-db:
+    image: mysql:8.0
+    container_name: hms-mysql-db
+    ports:
+      - "3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hms-network
+
+  # ────────────────────────────────────────────────────────────────────────
+  # SERVICE REGISTRY (EUREKA)
+  # ────────────────────────────────────────────────────────────────────────
+  eureka-server:
+    build: ./eureka-server
+    container_name: hms-eureka-server
+    ports:
+      - "8761:8761"
+    networks:
+      - hms-network
+
+  # ────────────────────────────────────────────────────────────────────────
+  # AUTHENTICATION SERVICE
+  # ────────────────────────────────────────────────────────────────────────
+  auth-service:
+    build: ./auth-service
+    container_name: hms-auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://eureka-server:8761/eureka
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/auth_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+    depends_on:
+      eureka-server:
+        condition: service_started
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - hms-network
+
+  # ────────────────────────────────────────────────────────────────────────
+  # PATIENT SERVICE
+  # ────────────────────────────────────────────────────────────────────────
+  patient-service:
+    build: ./patient-service
+    container_name: hms-patient-service
+    ports:
+      - "8082:8082"
+    environment:
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://eureka-server:8761/eureka
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/patient_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+    depends_on:
+      eureka-server:
+        condition: service_started
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - hms-network
+
+  # ────────────────────────────────────────────────────────────────────────
+  # DOCTOR SERVICE
+  # ────────────────────────────────────────────────────────────────────────
+  doctor-service:
+    build: ./doctor-service
+    container_name: hms-doctor-service
+    ports:
+      - "8083:8083"
+    environment:
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://eureka-server:8761/eureka
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/doctor_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - APP_PATIENT-SERVICE_URL=http://patient-service:8082
+    depends_on:
+      eureka-server:
+        condition: service_started
+      patient-service:
+        condition: service_started
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - hms-network
+
+  # ────────────────────────────────────────────────────────────────────────
+  # APPOINTMENT SERVICE
+  # ────────────────────────────────────────────────────────────────────────
+  appointment-service:
+    build: ./appointment-service
+    container_name: hms-appointment-service
+    ports:
+      - "8084:8084"
+    environment:
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://eureka-server:8761/eureka
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/appointment_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - APP_PATIENT-SERVICE_URL=http://patient-service:8082
+    depends_on:
+      eureka-server:
+        condition: service_started
+      patient-service:
+        condition: service_started
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - hms-network
+
+  # ────────────────────────────────────────────────────────────────────────
+  # API GATEWAY
+  # ────────────────────────────────────────────────────────────────────────
+  api-gateway:
+    build: ./api-gateway
+    container_name: hms-api-gateway
+    ports:
+      - "8090:8080"
+    environment:
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://eureka-server:8761/eureka
+    depends_on:
+      eureka-server:
+        condition: service_started
+    networks:
+      - hms-network
+
+volumes:
+  mysql-data:
+    driver: local
+
+networks:
+  hms-network:
+    driver: bridge

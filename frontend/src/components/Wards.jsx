@@ -8,7 +8,9 @@ function Wards({ beds, patients, handleBedCleaningComplete, setSelectedPatient, 
     return filterWard === 'All' ? true : b.ward === filterWard;
   });
 
-  const wardNames = ['ICU', 'Pediatric Ward', 'General Ward', 'Emergency Room'];
+  // Hardcoded ward list replaced — now derived dynamically from actual bed data.
+  // Any new wards added in the backend will automatically appear here.
+  const wardNames = [...new Set(beds.map(b => b.ward))];
 
   return (
     <div className="flex-column gap-lg" style={{ display: 'flex' }}>

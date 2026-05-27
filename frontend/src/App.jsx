@@ -30,13 +30,16 @@ function App() {
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
 
   // Form states
+  // FIX F-01: Initialize doctorName as '' — the useEffect below syncs it to
+  // the first doctor from the API once the list loads, so the select and the
+  // submitted value always agree.
   const [newPatient, setNewPatient] = useState({
     name: '', age: '', gender: 'Male', bloodGroup: 'O+', contact: '',
     department: 'General Medicine', status: 'Outpatient', bedId: 'None',
-    doctorName: 'Dr. Maria Santos', diagnosis: ''
+    doctorName: '', diagnosis: ''
   });
   const [newAppointment, setNewAppointment] = useState({
-    patientName: '', doctorName: 'Dr. Sarah Jenkins', date: '', time: '', reason: ''
+    patientName: '', doctorName: '', date: '', time: '', reason: ''
   });
 
   const [newPrescriptionText, setNewPrescriptionText] = useState('');
@@ -76,6 +79,15 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // FIX F-01: When the doctors list first populates (or changes), set the
+  // default doctor in both forms only if not already explicitly chosen by the user.
+  useEffect(() => {
+    if (doctors.length === 0) return;
+    const firstDoc = doctors[0].name;
+    setNewPatient(prev => ({ ...prev, doctorName: prev.doctorName || firstDoc }));
+    setNewAppointment(prev => ({ ...prev, doctorName: prev.doctorName || firstDoc }));
+  }, [doctors]);
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
@@ -110,10 +122,11 @@ function App() {
       await fetchAllData();
 
       setShowPatientModal(false);
+      // FIX F-01: Reset form with the first doctor from the live list, not a hardcoded name.
       setNewPatient({
         name: '', age: '', gender: 'Male', bloodGroup: 'O+', contact: '',
         department: 'General Medicine', status: 'Outpatient', bedId: 'None',
-        doctorName: 'Dr. Maria Santos', diagnosis: ''
+        doctorName: doctors[0]?.name || '', diagnosis: ''
       });
     } catch (err) {
       console.error('Failed to register patient:', err);
@@ -122,6 +135,19 @@ function App() {
   };
 
   // ── Book Appointment ────────────────────────────────────
+  // FIX F-02: The HTML <input type="time"> yields 24h strings like "14:30".
+  // The backend/DB stores and displays 12h strings like "2:30 PM".
+  // This helper converts between the two so all entries look consistent.
+  const convertTo12Hour = (time24) => {
+    if (!time24) return '';
+    const [hourStr, minuteStr] = time24.split(':');
+    let hours = parseInt(hourStr, 10);
+    const minutes = minuteStr || '00';
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12; // convert 0 → 12 for midnight
+    return `${hours}:${minutes} ${ampm}`;
+  };
+
   const handleBookAppointment = async (e) => {
     e.preventDefault();
     if (!newAppointment.patientName || !newAppointment.date || !newAppointment.time) return;
@@ -131,15 +157,16 @@ function App() {
         patientName: newAppointment.patientName,
         doctorName: newAppointment.doctorName,
         date: newAppointment.date,
-        time: newAppointment.time,
+        time: convertTo12Hour(newAppointment.time), // FIX F-02: Store as 12h AM/PM format
         reason: newAppointment.reason,
       });
 
       await fetchAllData();
 
       setShowAppointmentModal(false);
+      // FIX F-01: Reset form with the first doctor from the live list, not a hardcoded name.
       setNewAppointment({
-        patientName: '', doctorName: 'Dr. Sarah Jenkins', date: '', time: '', reason: ''
+        patientName: '', doctorName: doctors[0]?.name || '', date: '', time: '', reason: ''
       });
     } catch (err) {
       console.error('Failed to book appointment:', err);
